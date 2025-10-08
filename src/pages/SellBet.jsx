@@ -12,6 +12,7 @@ function SellBet() {
   const [showNewCustomerForm, setShowNewCustomerForm] = useState(false);
 
   // Estados de eventos y apuestas
+  const [selectedDate, setSelectedDate] = useState(new Date().toISOString().split('T')[0]);
   const [todayEvents, setTodayEvents] = useState([]);
   const [selectedEvent, setSelectedEvent] = useState(null);
   const [betNumber, setBetNumber] = useState('');
@@ -29,24 +30,31 @@ function SellBet() {
 
   useEffect(() => {
     loadTodayEvents();
-  }, []);
+  }, [selectedDate]);
 
   useEffect(() => {
-    if (searchQuery.length > 0) {
-      searchCustomers();
+    if (searchQuery.length >= 2) {
+      // Esperar 500ms después de que el usuario termine de escribir
+      const timeoutId = setTimeout(() => {
+        searchCustomers();
+      }, 500);
+      
+      return () => clearTimeout(timeoutId);
     } else {
       setCustomers([]);
+      setShowCustomerSearch(false);
     }
   }, [searchQuery]);
 
   // Cargar eventos del día que estén abiertos
   const loadTodayEvents = async () => {
     try {
-      const today = new Date().toISOString().split('T')[0];
-      const response = await lotteryEventService.getAll({ date: today, state: 'OPEN' });
+      const response = await lotteryEventService.getAll({ date: selectedDate, state: 'OPEN' });
       
-      if (response.data.responseStatus === 1) {
-        setTodayEvents(response.data.data || []);
+      // Adaptarse a la respuesta del backend
+      if (response.data.codeStatus === 200 || response.data.responseStatus === 0) {
+        const eventData = response.data.detail || response.data.data || [];
+        setTodayEvents(eventData);
       }
     } catch (err) {
       console.error('Error loading events:', err);
@@ -58,8 +66,10 @@ function SellBet() {
   const searchCustomers = async () => {
     try {
       const response = await customerService.search(searchQuery);
-      if (response.data.responseStatus === 1) {
-        setCustomers(response.data.data || []);
+      // Adaptarse a la respuesta del backend
+      if (response.data.codeStatus === 200 || response.data.responseStatus === 0) {
+        const customerData = response.data.detail || response.data.data || [];
+        setCustomers(customerData);
       }
     } catch (err) {
       console.error('Error searching customers:', err);
@@ -83,15 +93,17 @@ function SellBet() {
 
       const response = await customerService.create(customerData);
       
-      if (response.data.responseStatus === 1) {
-        setSelectedCustomer(response.data.data);
+      // Adaptarse a la respuesta del backend
+      if (response.data.codeStatus === 201 || response.data.responseStatus === 0) {
+        const newCustomer = response.data.detail || response.data.data;
+        setSelectedCustomer(newCustomer);
         setShowNewCustomerForm(false);
         setShowCustomerSearch(false);
         alert('Cliente creado exitosamente');
       }
     } catch (err) {
       console.error('Error creating customer:', err);
-      alert('Error al crear cliente');
+      alert('Error al crear cliente: ' + (err.response?.data?.message || 'Error desconocido'));
     } finally {
       setLoading(false);
     }
@@ -130,14 +142,19 @@ function SellBet() {
       const betData = {
         customerId: selectedCustomer.id,
         eventId: selectedEvent.id,
-        chosenNumber: number,
+        userId: 1, // Usuario por defecto (temporalmente hasta implementar login)
+        numberPlayed: number,
         amount: amount,
       };
 
       const response = await betService.create(betData);
 
-      if (response.data.responseStatus === 1) {
-        setLastBet(response.data.data);
+      // Adaptarse a la respuesta del backend
+      if (response.data.codeStatus === 201 || response.data.responseStatus === 0) {
+        const newBet = response.data.detail || response.data.data;
+        
+        
+        setLastBet(newBet);
         setShowVoucher(true);
         
         // Limpiar formulario
@@ -146,6 +163,8 @@ function SellBet() {
         setSelectedEvent(null);
         
         alert('Apuesta creada exitosamente');
+      } else {
+        throw new Error(response.data.message || 'Error desconocido');
       }
     } catch (err) {
       console.error('Error creating bet:', err);
@@ -179,12 +198,23 @@ function SellBet() {
           <h2 className="text-3xl font-bold text-gray-900">Vender Apuesta</h2>
           <p className="text-gray-600">Registra una nueva apuesta para un cliente</p>
         </div>
-        <button
-          onClick={loadTodayEvents}
-          className="bg-green-600 text-white px-4 py-2 rounded-lg hover:bg-green-700"
-        >
-          Actualizar Eventos
-        </button>
+        <div className="flex items-center space-x-4">
+          <div>
+            <label className="block text-xs font-medium text-gray-600 mb-1">Fecha</label>
+            <input
+              type="date"
+              value={selectedDate}
+              onChange={(e) => setSelectedDate(e.target.value)}
+              className="px-3 py-2 border-2 rounded-lg focus:ring-2 focus:ring-green-500 focus:border-transparent"
+            />
+          </div>
+          <button
+            onClick={loadTodayEvents}
+            className="bg-green-600 text-white px-4 py-2 rounded-lg hover:bg-green-700 mt-5"
+          >
+            Actualizar Eventos
+          </button>
+        </div>
       </div>
 
       {error && (
@@ -292,29 +322,54 @@ function SellBet() {
                     Selecciona el Sorteo
                   </label>
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-                    {todayEvents.map((event) => (
-                      <button
-                        key={event.id}
-                        type="button"
-                        onClick={() => setSelectedEvent(event)}
-                        className={`p-4 border-2 rounded-lg text-left transition-all ${
-                          selectedEvent?.id === event.id
-                            ? 'border-green-500 bg-green-50'
-                            : 'border-gray-200 hover:border-green-300'
-                        }`}
-                      >
-                        <p className="font-bold text-gray-900">{event.lotteryTypeName}</p>
-                        <p className="text-sm text-gray-600">
-                          Sorteo #{event.sequenceNumber}
-                        </p>
-                        <p className="text-xs text-gray-500">
-                          {event.openTime} - {event.closeTime}
-                        </p>
-                        <p className="text-xs font-semibold text-green-600 mt-1">
-                          Paga: Q{event.payoutFactor.toFixed(2)} por Q1
-                        </p>
-                      </button>
-                    ))}
+                    {todayEvents.map((event) => {
+                      // Mapeo de payoutFactor por lotteryTypeId
+                      const payoutFactors = {
+                        1: 25.00,   // La Santa
+                        2: 70.00,   // La Rifa
+                        3: 150.00   // El Sorteo
+                      };
+                      
+                      const lotteryNames = {
+                        1: 'La Santa',
+                        2: 'La Rifa',
+                        3: 'El Sorteo'
+                      };
+
+                      const payoutFactor = event.payoutFactor || payoutFactors[event.lotteryTypeId] || 0;
+                      const lotteryName = event.lotteryTypeName || lotteryNames[event.lotteryTypeId] || `Lotería ${event.lotteryTypeId}`;
+
+                      return (
+                        <button
+                          key={event.id}
+                          type="button"
+                          onClick={() => {
+                            // Agregar payoutFactor al evento seleccionado
+                            setSelectedEvent({
+                              ...event,
+                              payoutFactor: payoutFactor,
+                              lotteryTypeName: lotteryName
+                            });
+                          }}
+                          className={`p-4 border-2 rounded-lg text-left transition-all ${
+                            selectedEvent?.id === event.id
+                              ? 'border-green-500 bg-green-50'
+                              : 'border-gray-200 hover:border-green-300'
+                          }`}
+                        >
+                          <p className="font-bold text-gray-900">{lotteryName}</p>
+                          <p className="text-sm text-gray-600">
+                            Sorteo #{event.sequenceNumber || event.eventNumberOfDay}
+                          </p>
+                          <p className="text-xs text-gray-500">
+                            {event.openTime} - {event.closeTime}
+                          </p>
+                          <p className="text-xs font-semibold text-green-600 mt-1">
+                            Paga: Q{payoutFactor.toFixed(2)} por Q1
+                          </p>
+                        </button>
+                      );
+                    })}
                   </div>
                 </div>
 
@@ -355,10 +410,10 @@ function SellBet() {
                           className="w-full pl-10 pr-4 py-3 text-xl border-2 rounded-lg focus:ring-2 focus:ring-green-500 focus:border-transparent"
                         />
                       </div>
-                      {betAmount && (
+                      {betAmount && selectedEvent && (
                         <p className="mt-2 text-sm text-gray-600">
                           Premio potencial: <span className="font-bold text-green-600">
-                            Q{(parseFloat(betAmount) * selectedEvent.payoutFactor).toFixed(2)}
+                            Q{(parseFloat(betAmount) * (selectedEvent.payoutFactor || 0)).toFixed(2)}
                           </span>
                         </p>
                       )}
@@ -475,56 +530,63 @@ function SellBet() {
                 <div className="border-t border-b border-gray-300 py-4 space-y-2">
                   <div className="flex justify-between">
                     <span className="text-sm text-gray-600">Cliente:</span>
-                    <span className="font-semibold">{lastBet.customerName}</span>
+                    <span className="font-semibold">{lastBet.customerName || 'N/A'}</span>
                   </div>
                   <div className="flex justify-between">
                     <span className="text-sm text-gray-600">Sorteo:</span>
-                    <span className="font-semibold">{lastBet.lotteryTypeName}</span>
+                    <span className="font-semibold">{lastBet.lotteryTypeName || 'N/A'}</span>
                   </div>
                   <div className="flex justify-between">
                     <span className="text-sm text-gray-600">Evento:</span>
-                    <span className="font-semibold">#{lastBet.eventSequenceNumber}</span>
+                    <span className="font-semibold">#{lastBet.eventSequenceNumber || lastBet.eventNumberOfDay || 'N/A'}</span>
                   </div>
                   <div className="flex justify-between">
                     <span className="text-sm text-gray-600">Número:</span>
                     <span className="text-3xl font-bold text-green-600">
-                      {String(lastBet.chosenNumber).padStart(2, '0')}
+                      {String(lastBet.chosenNumber || lastBet.numberPlayed || 0).padStart(2, '0')}
                     </span>
                   </div>
                   <div className="flex justify-between">
                     <span className="text-sm text-gray-600">Apuesta:</span>
-                    <span className="font-bold">Q{lastBet.amount.toFixed(2)}</span>
+                    <span className="font-bold">Q{(lastBet.amount || 0).toFixed(2)}</span>
                   </div>
                   <div className="flex justify-between">
                     <span className="text-sm text-gray-600">Premio Potencial:</span>
                     <span className="font-bold text-green-600">
-                      Q{lastBet.potentialPayout.toFixed(2)}
+                      Q{(lastBet.potentialPayout || (lastBet.amount * (selectedEvent?.payoutFactor || 0)) || 0).toFixed(2)}
                     </span>
                   </div>
                   <div className="flex justify-between text-xs">
                     <span className="text-gray-500">Fecha:</span>
                     <span className="text-gray-500">
-                      {new Date(lastBet.createdAt).toLocaleString()}
+                      {lastBet.createdAt ? new Date(lastBet.createdAt).toLocaleString() : new Date().toLocaleString()}
                     </span>
                   </div>
                 </div>
 
                 <div className="mt-4 flex justify-center">
-                  <QRCodeSVG value={lastBet.qrToken} size={150} />
+                  {lastBet.qrToken && <QRCodeSVG value={lastBet.qrToken} size={150} />}
                 </div>
 
-                <p className="text-xs text-center text-gray-500 mt-2">
-                  Código: {lastBet.qrToken.substring(0, 8)}...
-                </p>
-                <p className="text-xs text-center text-gray-500 mt-1">
-                  Válido por 5 días hábiles
-                </p>
+                {lastBet.qrToken && (
+                  <>
+                    <p className="text-xs text-center text-gray-500 mt-2">
+                      Código: {lastBet.qrToken.substring(0, 8)}...
+                    </p>
+                    <p className="text-xs text-center text-gray-500 mt-1">
+                      Válido por 5 días hábiles
+                    </p>
+                  </>
+                )}
               </div>
             </div>
 
             <div className="flex space-x-3 mt-4">
               <button
-                onClick={() => setShowVoucher(false)}
+                onClick={() => {
+                  setShowVoucher(false);
+                  setLastBet(null);
+                }}
                 className="flex-1 px-4 py-2 border border-gray-300 rounded-lg hover:bg-gray-50"
               >
                 Cerrar
