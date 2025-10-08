@@ -11,6 +11,8 @@ function Events() {
   const [showResultModal, setShowResultModal] = useState(false);
   const [winningNumber, setWinningNumber] = useState('');
   const [eventStats, setEventStats] = useState(null);
+  const [showWinnersModal, setShowWinnersModal] = useState(false);
+  const [winners, setWinners] = useState([]);
 
   useEffect(() => {
     loadEvents();
@@ -69,7 +71,8 @@ function Events() {
       setLoading(true);
       const response = await lotteryEventService.openEvent(eventId);
       
-      if (response.data.responseStatus === 1) {
+      // Adaptarse a la respuesta del backend
+      if (response.data.codeStatus === 200 || response.data.responseStatus === 0) {
         alert('Evento abierto exitosamente');
         loadEvents();
       }
@@ -91,7 +94,8 @@ function Events() {
       setLoading(true);
       const response = await lotteryEventService.closeEvent(eventId);
       
-      if (response.data.responseStatus === 1) {
+      // Adaptarse a la respuesta del backend
+      if (response.data.codeStatus === 200 || response.data.responseStatus === 0) {
         alert('Evento cerrado exitosamente');
         loadEvents();
       }
@@ -119,7 +123,8 @@ function Events() {
         winningNumber: number
       });
       
-      if (response.data.responseStatus === 1) {
+      // Adaptarse a la respuesta del backend
+      if (response.data.codeStatus === 200 || response.data.responseStatus === 0) {
         alert('Resultados publicados exitosamente');
         setShowResultModal(false);
         setWinningNumber('');
@@ -140,8 +145,10 @@ function Events() {
       setLoading(true);
       const response = await lotteryEventService.getStats(event.id);
       
-      if (response.data.responseStatus === 1) {
-        setEventStats(response.data.data);
+      // Adaptarse a la respuesta del backend
+      if (response.data.codeStatus === 200 || response.data.responseStatus === 0) {
+        const stats = response.data.detail || response.data.data;
+        setEventStats(stats);
         setSelectedEvent(event);
       }
     } catch (err) {
@@ -158,23 +165,16 @@ function Events() {
       setLoading(true);
       const response = await lotteryEventService.getWinners(event.id);
       
-      if (response.data.responseStatus === 1) {
-        const winners = response.data.data || [];
-        
-        if (winners.length === 0) {
-          alert('No hay ganadores en este sorteo');
-        } else {
-          // Mostrar ganadores en una alerta (después podemos hacer un modal)
-          const winnersList = winners.map(w => 
-            `${w.customerName} - Número ${String(w.chosenNumber).padStart(2, '0')} - Q${w.prizeAmount.toFixed(2)}`
-          ).join('\n');
-          
-          alert(`Ganadores:\n\n${winnersList}`);
-        }
+      // Adaptarse a la respuesta del backend
+      if (response.data.codeStatus === 200 || response.data.responseStatus === 0) {
+        const winnersData = response.data.detail || response.data.data || [];
+        setWinners(winnersData);
+        setSelectedEvent(event);
+        setShowWinnersModal(true);
       }
     } catch (err) {
       console.error('Error loading winners:', err);
-      alert('Error al cargar ganadores');
+      alert('Error al cargar ganadores: ' + (err.response?.data?.message || 'Error desconocido'));
     } finally {
       setLoading(false);
     }
@@ -425,7 +425,7 @@ function Events() {
 
       {/* Modal de Publicar Resultados */}
       {showResultModal && selectedEvent && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
           <div className="bg-white rounded-lg p-6 max-w-md w-full mx-4">
             <h3 className="text-xl font-bold mb-4">Publicar Resultado</h3>
             
@@ -485,8 +485,8 @@ function Events() {
       )}
 
       {/* Modal de Estadísticas */}
-      {eventStats && selectedEvent && !showResultModal && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+      {eventStats && selectedEvent && !showResultModal && !showWinnersModal && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
           <div className="bg-white rounded-lg p-6 max-w-2xl w-full mx-4 max-h-[90vh] overflow-y-auto">
             <h3 className="text-xl font-bold mb-4">Estadísticas del Evento</h3>
             
@@ -552,6 +552,127 @@ function Events() {
             >
               Cerrar
             </button>
+          </div>
+        </div>
+      )}
+
+      {/* Modal de Ganadores */}
+      {showWinnersModal && selectedEvent && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
+          <div className="bg-white rounded-lg p-6 max-w-3xl w-full mx-4 max-h-[90vh] overflow-y-auto">
+            <div className="flex items-center justify-between mb-4">
+              <h3 className="text-2xl font-bold text-gray-900 flex items-center">
+                <Trophy className="w-6 h-6 text-yellow-500 mr-2" />
+                Ganadores del Sorteo
+              </h3>
+              <button
+                onClick={() => {
+                  setShowWinnersModal(false);
+                  setWinners([]);
+                  setSelectedEvent(null);
+                }}
+                className="text-gray-500 hover:text-gray-700"
+              >
+                ✕
+              </button>
+            </div>
+
+            {/* Info del evento */}
+            <div className="mb-6 bg-gradient-to-r from-green-50 to-blue-50 p-4 rounded-lg border border-green-200">
+              <div className="flex items-center justify-between">
+                <div>
+                  <p className="font-bold text-lg text-gray-900">
+                    {selectedEvent.lotteryTypeName || `Lotería ${selectedEvent.lotteryTypeId}`}
+                  </p>
+                  <p className="text-sm text-gray-600">
+                    Sorteo #{selectedEvent.sequenceNumber || selectedEvent.eventNumberOfDay} - {selectedEvent.eventDate}
+                  </p>
+                </div>
+                {selectedEvent.winningNumber !== null && (
+                  <div className="bg-yellow-100 border-2 border-yellow-400 rounded-lg px-6 py-3">
+                    <p className="text-xs font-semibold text-yellow-800 mb-1">Número Ganador</p>
+                    <p className="text-4xl font-bold text-yellow-600">
+                      {String(selectedEvent.winningNumber).padStart(2, '0')}
+                    </p>
+                  </div>
+                )}
+              </div>
+            </div>
+
+            {/* Lista de ganadores */}
+            {winners.length === 0 ? (
+              <div className="text-center py-12">
+                <div className="w-24 h-24 mx-auto mb-4 bg-gray-100 rounded-full flex items-center justify-center">
+                  <Trophy className="w-12 h-12 text-gray-400" />
+                </div>
+                <h4 className="text-xl font-bold text-gray-600 mb-2">Ganador Desierto</h4>
+                <p className="text-gray-500">No hubo ganadores en este sorteo</p>
+              </div>
+            ) : (
+              <div className="space-y-3">
+                <div className="flex items-center justify-between mb-3">
+                  <h4 className="font-semibold text-gray-700">
+                    Total de ganadores: <span className="text-green-600">{winners.length}</span>
+                  </h4>
+                  <p className="text-sm text-gray-500">
+                    Premio total: <span className="font-bold text-green-600">
+                      Q{winners.reduce((sum, w) => sum + w.totalPrize, 0).toFixed(2)}
+                    </span>
+                  </p>
+                </div>
+
+                {winners.map((winner, index) => (
+                  <div
+                    key={winner.betId}
+                    className="bg-gradient-to-r from-green-50 to-emerald-50 border-l-4 border-green-500 rounded-r-lg p-4 hover:shadow-md transition-shadow"
+                  >
+                    <div className="flex items-center justify-between">
+                      <div className="flex items-center space-x-4">
+                        <div className="bg-green-600 text-white rounded-full w-10 h-10 flex items-center justify-center font-bold">
+                          #{index + 1}
+                        </div>
+                        <div>
+                          <p className="font-bold text-lg text-gray-900">{winner.customerName}</p>
+                          <div className="flex items-center space-x-3 text-sm text-gray-600">
+                            <span>Número apostado: <span className="font-semibold text-green-600">
+                              {String(winner.chosenNumber).padStart(2, '0')}
+                            </span></span>
+                            <span>•</span>
+                            <span>Apuesta: <span className="font-semibold">Q{winner.betAmount.toFixed(2)}</span></span>
+                          </div>
+                        </div>
+                      </div>
+                      <div className="text-right">
+                        <p className="text-2xl font-bold text-green-600">
+                          Q{winner.totalPrize.toFixed(2)}
+                        </p>
+                        {winner.isBirthday && winner.birthdayBonus > 0 && (
+                          <p className="text-xs text-yellow-600 font-semibold flex items-center justify-end">
+                            🎂 +Q{winner.birthdayBonus.toFixed(2)} cumpleaños
+                          </p>
+                        )}
+                        <p className="text-xs text-gray-500">
+                          Base: Q{winner.basePrize.toFixed(2)}
+                        </p>
+                      </div>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+
+            <div className="mt-6 pt-4 border-t">
+              <button
+                onClick={() => {
+                  setShowWinnersModal(false);
+                  setWinners([]);
+                  setSelectedEvent(null);
+                }}
+                className="w-full bg-green-600 text-white px-4 py-3 rounded-lg hover:bg-green-700 font-semibold"
+              >
+                Cerrar
+              </button>
+            </div>
           </div>
         </div>
       )}
