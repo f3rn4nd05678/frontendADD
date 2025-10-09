@@ -46,9 +46,9 @@ export const lotteryEventService = {
     getAll: (params) => api.get('/lottery-events', { params }),
     getById: (id) => api.get(`/lottery-events/${id}`),
     generateDaily: (date) => api.post('/lottery-events/generate-daily', { date }),
-    openEvent: (id) => api.put(`/lottery-events/${id}/open`), // Cambio de POST a PUT
-    closeEvent: (id) => api.put(`/lottery-events/${id}/close`), // Cambio de POST a PUT
-    publishResults: (id, data) => api.put(`/lottery-events/${id}/publish-results`, data), // Cambio de POST a PUT y ruta corregida
+    openEvent: (id) => api.put(`/lottery-events/${id}/open`),
+    closeEvent: (id) => api.put(`/lottery-events/${id}/close`),
+    publishResults: (id, data) => api.put(`/lottery-events/${id}/publish-results`, data),
     getWinners: (id) => api.get(`/lottery-events/${id}/winners`),
     getStats: (id) => api.get(`/lottery-events/${id}/stats`),
 };
@@ -59,23 +59,30 @@ export const customerService = {
     getById: (id) => api.get(`/customers/${id}`),
     create: (data) => api.post('/customers', data),
     update: (id, data) => api.put(`/customers/${id}`, data),
-    search: (query) => api.get('/customers', { params: { search: query } }), // Corregido
-};
-
-// ========== BETS ==========
-export const betService = {
-    getAll: (params) => api.get('/bets', { params }),
-    getById: (id) => api.get(`/bets/${id}`),
-    create: (data) => api.post('/bets', data),
-    getByQr: (qrToken) => api.get(`/bets/qr/${qrToken}`),
-    claim: (id) => api.post(`/bets/${id}/claim`),
+    delete: (id) => api.delete(`/customers/${id}`),
+    reactivate: (id) => api.put(`/customers/${id}/reactivate`),
+    getInactive: () => api.get('/customers/inactive'),
+    search: (query) => api.get('/customers', { params: { search: query } }),
 };
 
 // ========== PAYOUTS ==========
 export const payoutService = {
-    getAll: (params) => api.get('/payouts', { params }),
-    getById: (id) => api.get(`/payouts/${id}`),
-    getPendingByCustomer: (customerId) => api.get(`/payouts/pending/${customerId}`),
+    calculate: (data) => api.post('/payouts/calculate', data),
+    
+    process: (data) => api.post('/payouts/process', data),
+    
+    getPending: () => api.get('/payouts/pending'),
+};
+
+// ========== BETS  ==========
+export const betService = {
+    getAll: (params) => api.get('/bets', { params }),
+    getById: (id) => api.get(`/bets/${id}`),
+    getByQr: (qrToken) => api.get(`/bets/qr/${qrToken}`),
+    
+    create: (data) => api.post('/bets', data),
+    getEventSummary: (eventId) => api.get(`/bets/event/${eventId}/summary`),
+    getDailyWinners: (date) => api.get('/bets/winners/daily', { params: { date } }),
 };
 
 // ========== REPORTS ==========
@@ -87,7 +94,7 @@ export const reportService = {
         }),
     getMonthlyChart: (year, month) => {
         console.log('Calling monthly chart with:', { year, month });
-        return api.get('/reports/daily-collection', { params: { year, month } }); 
+        return api.get('/reports/daily-collection', { params: { year, month } });
     },
     getTopWinners: (year, month, criteriaType) => {
         const endpoint = criteriaType === 'count'
@@ -106,7 +113,7 @@ export const userService = {
     delete: (id) => api.delete(`/users/${id}`),
 };
 
-// ========== AUTH (si lo implementas después) ==========
+// ========== AUTH ==========
 export const authService = {
     login: (username, password) => api.post('/auth/login', { username, password }),
     logout: () => {
@@ -115,5 +122,6 @@ export const authService = {
     },
     getCurrentUser: () => api.get('/auth/me'),
 };
+
 
 export default api;

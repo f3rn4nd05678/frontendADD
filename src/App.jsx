@@ -22,6 +22,7 @@ function App() {
           <Route path="events" element={<Events />} />
           <Route path="customers" element={<Customers />} />
           <Route path="claim" element={<ClaimPrize />} />
+          <Route path="claim-prize" element={<ClaimPrize />} />
           <Route path="winners" element={<Winners />} />
           <Route path="reports" element={<Reports />} />
           <Route path="settings" element={<Settings />} />

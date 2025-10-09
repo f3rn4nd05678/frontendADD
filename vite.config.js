@@ -8,4 +8,9 @@ export default defineConfig({
     react(),
     tailwindcss()
   ],
+  server: {
+    https: false,
+    host: true,
+    port: 5173
+  }
 })
