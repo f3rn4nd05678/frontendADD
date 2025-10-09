@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { DollarSign, TrendingUp, Users, Trophy } from 'lucide-react';
+import { Banknote, TrendingUp, Users, Trophy } from 'lucide-react';
 import { reportService, lotteryEventService } from '../services/api';
 
 function Dashboard() {
@@ -136,7 +136,7 @@ function Dashboard() {
         <StatCard
           title="Ingresos Hoy"
           value={`Q${stats.todayRevenue.toFixed(2)}`}
-          icon={DollarSign}
+          icon={Banknote}
           color="text-green-600"
           subtitle={`${stats.todayBets} apuestas`}
         />

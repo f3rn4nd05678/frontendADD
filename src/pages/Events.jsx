@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { Calendar, Play, Square, Trophy, TrendingUp, Users, DollarSign, RefreshCw } from 'lucide-react';
+import { Calendar, Play, Square, Trophy, TrendingUp, Users, Banknote, RefreshCw } from 'lucide-react';
 import { lotteryEventService } from '../services/api';
 
 function Events() {
@@ -505,7 +505,7 @@ function Events() {
               </div>
               
               <div className="bg-green-50 p-4 rounded-lg">
-                <DollarSign className="w-8 h-8 text-green-600 mb-2" />
+                <Banknote className="w-8 h-8 text-green-600 mb-2" />
                 <p className="text-2xl font-bold text-green-600">
                   Q{(eventStats.totalRevenue || 0).toFixed(2)}
                 </p>

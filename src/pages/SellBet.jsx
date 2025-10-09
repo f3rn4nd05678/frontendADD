@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef } from 'react';
-import { Search, User, Calendar, DollarSign, Ticket, Printer, Plus } from 'lucide-react';
+import { Search, User, Calendar, Banknote, Ticket, Printer, Plus } from 'lucide-react';
 import { customerService, lotteryEventService, betService } from '../services/api';
 import { QRCodeSVG } from 'qrcode.react';
 
@@ -398,7 +398,7 @@ function SellBet() {
                         Monto a Apostar
                       </label>
                       <div className="relative">
-                        <DollarSign className="absolute left-3 top-3 w-5 h-5 text-gray-400" />
+                        <Banknote className="absolute left-3 top-3 w-5 h-5 text-gray-400" />
                         <input
                           type="number"
                           step="0.01"
