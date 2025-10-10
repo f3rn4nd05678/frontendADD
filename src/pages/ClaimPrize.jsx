@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef } from 'react';
 import { betService, payoutService } from '../services/api';
-import { 
-  Search, Trophy, User, Calendar, DollarSign, CheckCircle, 
+import {
+  Search, Trophy, User, Calendar, DollarSign, CheckCircle,
   XCircle, AlertCircle, Gift, Ticket, Clock
 } from 'lucide-react';
 
@@ -20,7 +20,7 @@ function ClaimPrize() {
   useEffect(() => {
     const urlParams = new URLSearchParams(window.location.search);
     const code = urlParams.get('code');
-    
+
     if (code) {
       setSearchQuery(code);
       setTimeout(() => {
@@ -65,7 +65,7 @@ function ClaimPrize() {
       setCalculatedPayout(null);
 
       const response = await betService.getByQr(code.trim());
-      
+
       if (response.data.codeStatus === 200 || response.data.responseStatus === 0) {
         const result = response.data.detail || response.data.data;
         setBetResult(result);
@@ -102,7 +102,7 @@ function ClaimPrize() {
   const calculatePayout = async (betId) => {
     try {
       const response = await payoutService.calculate({ betId });
-      
+
       if (response.data.codeStatus === 200 || response.data.responseStatus === 0) {
         const calculation = response.data.detail || response.data.data;
         setCalculatedPayout(calculation);
@@ -134,7 +134,7 @@ function ClaimPrize() {
 
       if (response.data.codeStatus === 201 || response.data.responseStatus === 0) {
         setSuccess(`¡Premio pagado exitosamente! Recibo: ${response.data.detail.receiptNumber}`);
-        
+
         setTimeout(() => {
           setSearchQuery('');
           setBetResult(null);
@@ -156,10 +156,10 @@ function ClaimPrize() {
   const formatDate = (dateString) => {
     if (!dateString) return '';
     const date = new Date(dateString);
-    return date.toLocaleDateString('es-GT', { 
-      year: 'numeric', 
-      month: 'long', 
-      day: 'numeric' 
+    return date.toLocaleDateString('es-GT', {
+      year: 'numeric',
+      month: 'long',
+      day: 'numeric'
     });
   };
 
@@ -173,31 +173,16 @@ function ClaimPrize() {
   const getBetStateInfo = () => {
     if (!betResult) return null;
 
-    // Mapear estados numéricos a strings
-    const eventStateMap = {
-      0: 'PROGRAMMED',
-      1: 'OPEN',
-      2: 'CLOSED',
-      3: 'RESULTS_PUBLISHED'
-    };
-
-    const betStateMap = {
-      0: 'ISSUED',
-      1: 'WIN_PENDING',
-      2: 'PAID',
-      3: 'EXPIRED',
-      4: 'VOID'
-    };
-
-    const eventState = typeof betResult.eventState === 'number' 
-      ? eventStateMap[betResult.eventState] 
+    // Normalizar estados - siempre trabajar con números
+    const eventState = typeof betResult.eventState === 'string'
+      ? ({ 'PROGRAMMED': 0, 'OPEN': 1, 'CLOSED': 2, 'RESULTS_PUBLISHED': 3 }[betResult.eventState] ?? betResult.eventState)
       : betResult.eventState;
 
-    const betState = typeof betResult.betState === 'number'
-      ? betStateMap[betResult.betState]
+    const betState = typeof betResult.betState === 'string'
+      ? ({ 'ISSUED': 0, 'WIN_PENDING': 1, 'PAID': 2, 'EXPIRED': 3, 'VOID': 4 }[betResult.betState] ?? betResult.betState)
       : betResult.betState;
 
-    if (eventState !== 'RESULTS_PUBLISHED') {
+    if (eventState !== 3) {  // RESULTS_PUBLISHED
       return {
         color: 'bg-yellow-50 border-yellow-200',
         icon: <Clock className="w-6 h-6 text-yellow-600" />,
@@ -211,13 +196,13 @@ function ClaimPrize() {
         color: 'bg-red-50 border-red-200',
         icon: <XCircle className="w-6 h-6 text-red-600" />,
         title: 'No es Ganador',
-        message: betResult.winningNumber 
+        message: betResult.winningNumber
           ? `Número jugado: ${String(betResult.numberPlayed).padStart(2, '0')} | Número ganador: ${String(betResult.winningNumber).padStart(2, '0')}`
           : `Número jugado: ${String(betResult.numberPlayed).padStart(2, '0')}`
       };
     }
 
-    if (betState === 'PAID') {
+    if (betState === 2) {  // PAID
       return {
         color: 'bg-blue-50 border-blue-200',
         icon: <CheckCircle className="w-6 h-6 text-blue-600" />,
@@ -226,7 +211,7 @@ function ClaimPrize() {
       };
     }
 
-    if (betState === 'EXPIRED') {
+    if (betState === 3) {  // EXPIRED
       return {
         color: 'bg-gray-50 border-gray-200',
         icon: <XCircle className="w-6 h-6 text-gray-600" />,
@@ -235,7 +220,7 @@ function ClaimPrize() {
       };
     }
 
-    if (betState === 'WIN_PENDING') {
+    if (betState === 1) {  // WIN_PENDING
       return {
         color: 'bg-green-50 border-green-200',
         icon: <Trophy className="w-6 h-6 text-green-600" />,
