@@ -70,7 +70,13 @@ function ClaimPrize() {
         const result = response.data.detail || response.data.data;
         setBetResult(result);
 
-        if (result.isWinner && result.betState === 'WIN_PENDING') {
+        // ⚠️ FIX: Normalizar betState antes de comparar
+        const normalizedBetState = typeof result.betState === 'string'
+          ? ({ 'ISSUED': 0, 'WIN_PENDING': 1, 'PAID': 2, 'EXPIRED': 3, 'VOID': 4 }[result.betState] ?? result.betState)
+          : result.betState;
+
+        // Si es ganador y está pendiente de pago, calcular el premio
+        if (result.isWinner && normalizedBetState === 1) { // 1 = WIN_PENDING
           await calculatePayout(result.betId);
         }
       }
@@ -164,7 +170,6 @@ function ClaimPrize() {
   };
 
   const formatCurrency = (amount) => {
-    // Manejar diferentes formatos del backend
     const numAmount = parseFloat(amount);
     if (isNaN(numAmount)) return 'Q0.00';
     return `Q${numAmount.toFixed(2)}`;
@@ -308,50 +313,52 @@ function ClaimPrize() {
         </form>
       </div>
 
-      {/* Resultados */}
+      {/* Resultado de la Búsqueda */}
       {betResult && (
-        <div className="space-y-6">
-          {/* Estado */}
+        <div className="space-y-4">
+          {/* Estado de la Apuesta */}
           {stateInfo && (
-            <div className={`${stateInfo.color} border rounded-lg p-6`}>
+            <div className={`${stateInfo.color} rounded-lg shadow border p-6`}>
               <div className="flex items-start">
                 {stateInfo.icon}
                 <div className="ml-4">
-                  <h3 className="text-lg font-bold text-gray-900">{stateInfo.title}</h3>
-                  <p className="mt-1 text-sm text-gray-700">{stateInfo.message}</p>
+                  <h3 className="text-xl font-bold text-gray-900">{stateInfo.title}</h3>
+                  <p className="text-gray-700 mt-1">{stateInfo.message}</p>
                 </div>
               </div>
             </div>
           )}
 
           {/* Información de la Apuesta */}
-          <div className="bg-white rounded-lg shadow">
-            <div className="p-6 border-b">
-              <h3 className="text-xl font-bold text-gray-900 flex items-center">
-                <Ticket className="w-6 h-6 mr-2 text-blue-600" />
-                Información de la Apuesta
-              </h3>
-            </div>
-            <div className="p-6 grid grid-cols-1 md:grid-cols-2 gap-6">
+          <div className="bg-white rounded-lg shadow p-6">
+            <h3 className="text-xl font-bold text-gray-900 mb-4 flex items-center">
+              <Ticket className="w-6 h-6 mr-2 text-blue-600" />
+              Información de la Apuesta
+            </h3>
+            <div className="grid grid-cols-2 gap-4">
               <div>
                 <label className="block text-sm font-medium text-gray-500 mb-1">Cliente</label>
                 <div className="flex items-center">
-                  <User className="w-5 h-5 text-gray-400 mr-2" />
-                  <span className="text-lg font-semibold text-gray-900">{betResult.customerName}</span>
-                </div>
-              </div>
-              <div>
-                <label className="block text-sm font-medium text-gray-500 mb-1">Lotería</label>
-                <span className="text-lg font-semibold text-gray-900">{betResult.lotteryTypeName}</span>
-              </div>
-              <div>
-                <label className="block text-sm font-medium text-gray-500 mb-1">Fecha del Sorteo</label>
-                <div className="flex items-center">
-                  <Calendar className="w-5 h-5 text-gray-400 mr-2" />
+                  <User className="w-4 h-4 text-gray-400 mr-2" />
                   <span className="text-lg font-semibold text-gray-900">
-                    {formatDate(betResult.eventDate)} - Sorteo #{betResult.eventNumberOfDay}
+                    {betResult.customerName}
                   </span>
                 </div>
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-500 mb-1">Fecha del Evento</label>
+                <div className="flex items-center">
+                  <Calendar className="w-4 h-4 text-gray-400 mr-2" />
+                  <span className="text-lg font-semibold text-gray-900">
+                    {formatDate(betResult.eventDate)}
+                  </span>
+                </div>
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-500 mb-1">Sorteo</label>
+                <span className="text-lg font-semibold text-gray-900">
+                  {betResult.lotteryTypeName} #{betResult.dailySequence}
+                </span>
               </div>
               <div>
                 <label className="block text-sm font-medium text-gray-500 mb-1">Número Jugado</label>

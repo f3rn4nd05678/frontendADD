@@ -1,8 +1,10 @@
 import { useState, useEffect } from 'react';
-import { Banknote, TrendingUp, Users, Trophy } from 'lucide-react';
+import { useNavigate } from 'react-router-dom';
+import { Banknote, TrendingUp, Users, Trophy, Clock, CheckCircle, XCircle } from 'lucide-react';
 import { reportService, lotteryEventService } from '../services/api';
 
 function Dashboard() {
+  const navigate = useNavigate();
   const [stats, setStats] = useState({
     todayRevenue: 0,
     todayBets: 0,
@@ -22,20 +24,32 @@ function Dashboard() {
       const today = new Date().toISOString().split('T')[0];
       
       // Cargar resumen del día
-      const summaryRes = await reportService.getDailySummary(today);
-      if (summaryRes.data.responseStatus === 1) {
-        setStats({
-          todayRevenue: summaryRes.data.data.totalRevenue || 0,
-          todayBets: summaryRes.data.data.totalBets || 0,
-          activeCustomers: summaryRes.data.data.uniqueCustomers || 0,
-          pendingPayouts: summaryRes.data.data.pendingPayouts || 0,
-        });
+      try {
+        const summaryRes = await reportService.getDailySummary(today);
+        // ✅ FIX: Cambiar condición de responseStatus === 1 a === 0
+        if (summaryRes.data.codeStatus === 200 || summaryRes.data.responseStatus === 0) {
+          const data = summaryRes.data.detail || summaryRes.data.data;
+          setStats({
+            todayRevenue: data?.totalCollected || 0,
+            todayBets: data?.totalBets || 0,
+            activeCustomers: data?.totalEvents || 0,
+            pendingPayouts: data?.totalWinners || 0,
+          });
+        }
+      } catch (err) {
+        console.error('Error loading summary:', err);
       }
 
       // Cargar eventos de hoy
-      const eventsRes = await lotteryEventService.getAll({ date: today });
-      if (eventsRes.data.responseStatus === 1) {
-        setTodayEvents(eventsRes.data.data || []);
+      try {
+        const eventsRes = await lotteryEventService.getAll({ date: today });
+        // ✅ FIX: Cambiar condición de responseStatus === 1 a === 0
+        if (eventsRes.data.codeStatus === 200 || eventsRes.data.responseStatus === 0) {
+          const events = eventsRes.data.detail || eventsRes.data.data || [];
+          setTodayEvents(events);
+        }
+      } catch (err) {
+        console.error('Error loading events:', err);
       }
     } catch (error) {
       console.error('Error loading dashboard:', error);
@@ -52,62 +66,91 @@ function Dashboard() {
           <p className={`text-3xl font-bold ${color} mt-2`}>{value}</p>
           {subtitle && <p className="text-xs text-gray-500 mt-1">{subtitle}</p>}
         </div>
-        <div className={`p-3 rounded-full ${color} bg-opacity-10`}>
+        <div className={`p-3 rounded-full ${color.replace('text-', 'bg-').replace('-600', '-100')}`}>
           <Icon className={`w-8 h-8 ${color}`} />
         </div>
       </div>
     </div>
   );
 
+  // ✅ Componente EventCard
   const EventCard = ({ event }) => {
-    const getStateColor = (state) => {
-      switch (state) {
+    const getStateIcon = (state) => {
+      const stateNum = typeof state === 'number' ? state : state;
+      const stateMap = { 0: 'PROGRAMMED', 1: 'OPEN', 2: 'CLOSED', 3: 'RESULTS_PUBLISHED' };
+      const stateName = typeof state === 'number' ? stateMap[state] : state;
+      
+      switch (stateName) {
         case 'OPEN':
-          return 'bg-green-100 text-green-800';
+          return <CheckCircle className="w-5 h-5 text-green-600" />;
         case 'CLOSED':
-          return 'bg-yellow-100 text-yellow-800';
-        case 'COMPLETED':
-          return 'bg-blue-100 text-blue-800';
+          return <Clock className="w-5 h-5 text-yellow-600" />;
+        case 'RESULTS_PUBLISHED':
+          return <Trophy className="w-5 h-5 text-blue-600" />;
         default:
-          return 'bg-gray-100 text-gray-800';
+          return <Clock className="w-5 h-5 text-gray-600" />;
       }
     };
 
     const getStateText = (state) => {
-      switch (state) {
-        case 'PENDING':
-          return 'Pendiente';
-        case 'OPEN':
-          return 'Abierto';
-        case 'CLOSED':
-          return 'Cerrado';
-        case 'COMPLETED':
-          return 'Completado';
-        default:
-          return state;
+      const stateNum = typeof state === 'number' ? state : state;
+      const stateMap = { 0: 'PROGRAMMED', 1: 'OPEN', 2: 'CLOSED', 3: 'RESULTS_PUBLISHED' };
+      const stateName = typeof state === 'number' ? stateMap[state] : state;
+      
+      switch (stateName) {
+        case 'PROGRAMMED': return 'Programado';
+        case 'OPEN': return 'Abierto';
+        case 'CLOSED': return 'Cerrado';
+        case 'RESULTS_PUBLISHED': return 'Completado';
+        default: return stateName;
       }
     };
 
+    const getStateColor = (state) => {
+      const stateNum = typeof state === 'number' ? state : state;
+      const stateMap = { 0: 'PROGRAMMED', 1: 'OPEN', 2: 'CLOSED', 3: 'RESULTS_PUBLISHED' };
+      const stateName = typeof state === 'number' ? stateMap[state] : state;
+      
+      switch (stateName) {
+        case 'PROGRAMMED': return 'bg-gray-100 text-gray-800';
+        case 'OPEN': return 'bg-green-100 text-green-800';
+        case 'CLOSED': return 'bg-yellow-100 text-yellow-800';
+        case 'RESULTS_PUBLISHED': return 'bg-blue-100 text-blue-800';
+        default: return 'bg-gray-100 text-gray-800';
+      }
+    };
+
+    const getLotteryTypeName = (typeId) => {
+      const types = { 1: 'La Santa', 2: 'La Rifa', 3: 'El Sorteo' };
+      return types[typeId] || `Tipo ${typeId}`;
+    };
+
     return (
-      <div className="border-l-4 border-green-500 bg-white p-4 rounded-r-lg shadow-sm">
-        <div className="flex items-center justify-between">
+      <div className="flex items-center justify-between p-4 bg-gray-50 rounded-lg hover:bg-gray-100 transition-colors">
+        <div className="flex items-center space-x-4">
+          {getStateIcon(event.state)}
           <div>
-            <h4 className="font-semibold text-gray-900">{event.lotteryTypeName}</h4>
+            <p className="font-semibold text-gray-900">
+              {getLotteryTypeName(event.lotteryTypeId)} #{event.eventNumberOfDay}
+            </p>
             <p className="text-sm text-gray-600">
-              Sorteo #{event.sequenceNumber} - {event.openTime} - {event.closeTime}
+              {event.openTime} - {event.closeTime}
             </p>
           </div>
-          <span className={`px-3 py-1 rounded-full text-xs font-semibold ${getStateColor(event.state)}`}>
+        </div>
+        <div className="flex items-center space-x-3">
+          {event.winningNumber !== null && (
+            <div className="text-right mr-3">
+              <p className="text-xs text-gray-500">Número ganador</p>
+              <p className="text-2xl font-bold text-blue-600">
+                {String(event.winningNumber).padStart(2, '0')}
+              </p>
+            </div>
+          )}
+          <span className={`px-3 py-1 rounded-full text-sm font-medium ${getStateColor(event.state)}`}>
             {getStateText(event.state)}
           </span>
         </div>
-        {event.winningNumber !== null && (
-          <div className="mt-2 bg-yellow-50 p-2 rounded">
-            <p className="text-sm font-semibold text-yellow-800">
-              Número Ganador: <span className="text-2xl">{String(event.winningNumber).padStart(2, '0')}</span>
-            </p>
-          </div>
-        )}
       </div>
     );
   };
@@ -141,18 +184,18 @@ function Dashboard() {
           subtitle={`${stats.todayBets} apuestas`}
         />
         <StatCard
-          title="Clientes Activos"
+          title="Eventos"
           value={stats.activeCustomers}
           icon={Users}
           color="text-blue-600"
-          subtitle="Clientes únicos hoy"
+          subtitle="Total de eventos"
         />
         <StatCard
-          title="Premios Pendientes"
+          title="Ganadores"
           value={stats.pendingPayouts}
           icon={Trophy}
           color="text-yellow-600"
-          subtitle="Por reclamar"
+          subtitle="Del día"
         />
         <StatCard
           title="Total Apuestas"
@@ -178,7 +221,10 @@ function Dashboard() {
         {todayEvents.length === 0 ? (
           <div className="text-center py-8 text-gray-500">
             <p>No hay eventos programados para hoy</p>
-            <button className="mt-4 bg-green-600 text-white px-4 py-2 rounded-lg hover:bg-green-700">
+            <button 
+              onClick={() => navigate('/events')}
+              className="mt-4 bg-green-600 text-white px-4 py-2 rounded-lg hover:bg-green-700"
+            >
               Generar Eventos del Día
             </button>
           </div>
@@ -193,15 +239,29 @@ function Dashboard() {
 
       {/* Quick Actions */}
       <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-        <button className="bg-green-600 hover:bg-green-700 text-white p-6 rounded-lg shadow-lg transition-colors">
+        {/* ✅ Botón Vender Apuesta */}
+        <button 
+          onClick={() => navigate('/sell')}
+          className="bg-green-600 hover:bg-green-700 text-white p-6 rounded-lg shadow-lg transition-colors"
+        >
           <h4 className="font-bold text-lg">Vender Apuesta</h4>
           <p className="text-sm mt-1 opacity-90">Crear nueva apuesta para cliente</p>
         </button>
-        <button className="bg-blue-600 hover:bg-blue-700 text-white p-6 rounded-lg shadow-lg transition-colors">
+
+        {/* ✅ Botón Reclamar Premio */}
+        <button 
+          onClick={() => navigate('/claim')}
+          className="bg-blue-600 hover:bg-blue-700 text-white p-6 rounded-lg shadow-lg transition-colors"
+        >
           <h4 className="font-bold text-lg">Reclamar Premio</h4>
           <p className="text-sm mt-1 opacity-90">Escanear QR y pagar premio</p>
         </button>
-        <button className="bg-purple-600 hover:bg-purple-700 text-white p-6 rounded-lg shadow-lg transition-colors">
+
+        {/* ✅ Botón Ver Reportes */}
+        <button 
+          onClick={() => navigate('/reports')}
+          className="bg-purple-600 hover:bg-purple-700 text-white p-6 rounded-lg shadow-lg transition-colors"
+        >
           <h4 className="font-bold text-lg">Ver Reportes</h4>
           <p className="text-sm mt-1 opacity-90">Estadísticas y análisis</p>
         </button>

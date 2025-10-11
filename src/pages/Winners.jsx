@@ -1,11 +1,11 @@
 import { useState, useEffect } from 'react';
-import { Trophy, Calendar, Filter, Banknote, CheckCircle, Clock, XCircle, Gift } from 'lucide-react';
-import { lotteryEventService, betService } from '../services/api';
+import { Trophy, Calendar, Filter, Banknote, CheckCircle, Clock, XCircle, Gift, AlertTriangle } from 'lucide-react';
+import { lotteryEventService } from '../services/api';
 
 function Winners() {
   const [selectedDate, setSelectedDate] = useState(new Date().toISOString().split('T')[0]);
   const [winners, setWinners] = useState([]);
-  const [lotteryTypes, setLotteryTypes] = useState([]);
+  const [emptyEvents, setEmptyEvents] = useState([]); // ✅ Eventos sin ganadores
   const [selectedLotteryType, setSelectedLotteryType] = useState('all');
   const [selectedStatus, setSelectedStatus] = useState('all');
   const [loading, setLoading] = useState(false);
@@ -16,6 +16,7 @@ function Winners() {
     expired: 0,
     totalAmount: 0,
     paidAmount: 0,
+    emptyEvents: 0, // ✅ Contador de eventos desiertos
   });
 
   useEffect(() => {
@@ -26,10 +27,10 @@ function Winners() {
     try {
       setLoading(true);
       
-      // Obtener todos los eventos del día
+      // Obtener todos los eventos COMPLETADOS del día
       const eventsResponse = await lotteryEventService.getAll({ 
         date: selectedDate,
-        state: 3 // COMPLETED
+        state: 3 // RESULTS_PUBLISHED
       });
 
       if (eventsResponse.data.codeStatus === 200 || eventsResponse.data.responseStatus === 0) {
@@ -37,63 +38,115 @@ function Winners() {
         
         // Obtener ganadores de cada evento
         let allWinners = [];
+        let eventsWithoutWinners = []; // ✅ Lista de eventos sin ganadores
+        
         for (const event of events) {
           try {
             const winnersResponse = await lotteryEventService.getWinners(event.id);
+            
             if (winnersResponse.data.codeStatus === 200 || winnersResponse.data.responseStatus === 0) {
               const eventWinners = winnersResponse.data.detail || winnersResponse.data.data || [];
               
-              // Agregar información del evento a cada ganador
-              const winnersWithEvent = eventWinners.map(w => ({
-                ...w,
-                eventId: event.id,
-                lotteryTypeName: getLotteryTypeName(event.lotteryTypeId),
-                lotteryTypeId: event.lotteryTypeId,
-                eventDate: event.eventDate,
-                eventNumber: event.eventNumberOfDay,
-                winningNumber: event.winningNumber,
-              }));
-              
-              allWinners = [...allWinners, ...winnersWithEvent];
+              // ✅ Si no hay ganadores, agregarlo a la lista de eventos desiertos
+              if (eventWinners.length === 0) {
+                eventsWithoutWinners.push({
+                  eventId: event.id,
+                  lotteryTypeId: event.lotteryTypeId,
+                  lotteryTypeName: getLotteryTypeName(event.lotteryTypeId),
+                  eventDate: event.eventDate,
+                  eventNumber: event.eventNumberOfDay,
+                  winningNumber: event.winningNumber,
+                  isEmpty: true
+                });
+              } else {
+                // Agregar información del evento a cada ganador
+                const winnersWithEvent = eventWinners.map(w => ({
+                  ...w,
+                  lotteryTypeId: event.lotteryTypeId,
+                  lotteryTypeName: getLotteryTypeName(event.lotteryTypeId),
+                  eventDate: event.eventDate,
+                  eventNumber: event.eventNumberOfDay,
+                  eventWinningNumber: event.winningNumber
+                }));
+                
+                allWinners = [...allWinners, ...winnersWithEvent];
+              }
             }
           } catch (err) {
             console.error(`Error loading winners for event ${event.id}:`, err);
+            // Si hay error, también considerar el evento como desierto
+            eventsWithoutWinners.push({
+              eventId: event.id,
+              lotteryTypeId: event.lotteryTypeId,
+              lotteryTypeName: getLotteryTypeName(event.lotteryTypeId),
+              eventDate: event.eventDate,
+              eventNumber: event.eventNumberOfDay,
+              winningNumber: event.winningNumber,
+              isEmpty: true,
+              error: true
+            });
           }
         }
         
         setWinners(allWinners);
-        calculateStats(allWinners);
+        setEmptyEvents(eventsWithoutWinners);
+        
+        // Calcular estadísticas
+        calculateStats(allWinners, eventsWithoutWinners);
       }
     } catch (err) {
-      console.error('Error loading winners:', err);
+      console.error('Error loading events:', err);
+      setWinners([]);
+      setEmptyEvents([]);
     } finally {
       setLoading(false);
     }
   };
 
-  const getLotteryTypeName = (lotteryTypeId) => {
-    const names = {
+  const getLotteryTypeName = (typeId) => {
+    const types = {
       1: 'La Santa',
       2: 'La Rifa',
       3: 'El Sorteo'
     };
-    return names[lotteryTypeId] || `Lotería ${lotteryTypeId}`;
+    return types[typeId] || `Tipo ${typeId}`;
   };
 
-  const calculateStats = (winnersData) => {
-    const total = winnersData.length;
-    const pending = winnersData.filter(w => w.status === 'WIN_PENDING' || !w.paidAt).length;
-    const paid = winnersData.filter(w => w.status === 'PAID' || w.paidAt).length;
-    const expired = winnersData.filter(w => w.status === 'EXPIRED').length;
-    const totalAmount = winnersData.reduce((sum, w) => sum + w.totalPrize, 0);
-    const paidAmount = winnersData.filter(w => w.paidAt).reduce((sum, w) => sum + w.totalPrize, 0);
-
-    setStats({ total, pending, paid, expired, totalAmount, paidAmount });
+  const calculateStats = (winnersData, emptyEventsData) => {
+    let pending = 0;
+    let paid = 0;
+    let expired = 0;
+    let totalAmount = 0;
+    let paidAmount = 0;
+    
+    winnersData.forEach(winner => {
+      const status = getWinnerStatus(winner);
+      if (status === 'PENDING') pending++;
+      else if (status === 'PAID') {
+        paid++;
+        paidAmount += winner.totalPrize || 0;
+      }
+      else if (status === 'EXPIRED') expired++;
+      
+      totalAmount += winner.totalPrize || 0;
+    });
+    
+    setStats({
+      total: winnersData.length,
+      pending,
+      paid,
+      expired,
+      totalAmount,
+      paidAmount,
+      emptyEvents: emptyEventsData.length
+    });
   };
 
   const getWinnerStatus = (winner) => {
-    if (winner.paidAt) return 'PAID';
-    if (winner.status === 'EXPIRED') return 'EXPIRED';
+    // Aquí debes implementar la lógica para determinar el estado
+    // basado en la estructura de datos de tu backend
+    if (winner.state === 2 || winner.state === 'PAID') return 'PAID';
+    if (winner.state === 3 || winner.state === 'EXPIRED') return 'EXPIRED';
     return 'PENDING';
   };
 
@@ -140,6 +193,13 @@ function Winners() {
       return false;
     }
     
+    return true;
+  });
+
+  const filteredEmptyEvents = emptyEvents.filter(event => {
+    if (selectedLotteryType !== 'all' && event.lotteryTypeId !== parseInt(selectedLotteryType)) {
+      return false;
+    }
     return true;
   });
 
@@ -207,7 +267,7 @@ function Winners() {
       </div>
 
       {/* Estadísticas */}
-      <div className="grid grid-cols-2 md:grid-cols-5 gap-4">
+      <div className="grid grid-cols-2 md:grid-cols-6 gap-4">
         <div className="bg-white rounded-lg shadow p-4">
           <Trophy className="w-8 h-8 text-blue-600 mb-2" />
           <p className="text-2xl font-bold text-blue-600">{stats.total}</p>
@@ -237,7 +297,54 @@ function Winners() {
           <p className="text-2xl font-bold text-emerald-600">Q{stats.paidAmount.toFixed(2)}</p>
           <p className="text-sm text-gray-600">Ya Pagado</p>
         </div>
+
+        {/* ✅ Nueva estadística: Sorteos Desiertos */}
+        <div className="bg-white rounded-lg shadow p-4">
+          <AlertTriangle className="w-8 h-8 text-orange-600 mb-2" />
+          <p className="text-2xl font-bold text-orange-600">{stats.emptyEvents}</p>
+          <p className="text-sm text-gray-600">Sorteos Desiertos</p>
+        </div>
       </div>
+
+      {/* ✅ Sección de Sorteos Desiertos */}
+      {filteredEmptyEvents.length > 0 && (
+        <div className="bg-orange-50 border-l-4 border-orange-400 rounded-lg shadow p-6">
+          <div className="flex items-start mb-4">
+            <AlertTriangle className="w-6 h-6 text-orange-600 mr-3 flex-shrink-0 mt-1" />
+            <div className="flex-1">
+              <h3 className="text-lg font-bold text-orange-900 mb-2">
+                Sorteos Desiertos ({filteredEmptyEvents.length})
+              </h3>
+              <p className="text-sm text-orange-700 mb-3">
+                Los siguientes sorteos no tuvieron ganadores:
+              </p>
+              <div className="space-y-2">
+                {filteredEmptyEvents.map((event, idx) => (
+                  <div key={idx} className="bg-white rounded-lg p-4 border border-orange-200">
+                    <div className="flex justify-between items-center">
+                      <div>
+                        <p className="font-semibold text-gray-900">
+                          {event.lotteryTypeName} #{event.eventNumber}
+                        </p>
+                        <p className="text-sm text-gray-600">
+                          Número ganador: <span className="font-bold text-orange-600">
+                            {String(event.winningNumber).padStart(2, '0')}
+                          </span>
+                        </p>
+                      </div>
+                      <div className="text-right">
+                        <span className="inline-flex items-center px-3 py-1 rounded-full text-sm font-medium bg-orange-100 text-orange-800">
+                          Sin ganadores
+                        </span>
+                      </div>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Lista de Ganadores */}
       <div className="bg-white rounded-lg shadow">
@@ -263,75 +370,84 @@ function Winners() {
               </div>
             </div>
           ) : filteredWinners.length === 0 ? (
-            <div className="text-center py-12">
-              <Trophy className="w-16 h-16 mx-auto mb-4 text-gray-400" />
-              <p className="text-gray-600 text-lg">No hay ganadores para mostrar</p>
+            <div className="text-center py-12 text-gray-500">
+              <Trophy className="w-16 h-16 text-gray-300 mx-auto mb-4" />
+              <p className="text-lg font-medium">No hay ganadores para mostrar</p>
+              <p className="text-sm mt-2">
+                {stats.emptyEvents > 0 
+                  ? 'Todos los sorteos del día resultaron desiertos'
+                  : 'Selecciona otra fecha o ajusta los filtros'}
+              </p>
             </div>
           ) : (
-            <div className="space-y-3">
-              {filteredWinners.map((winner, index) => {
-                const status = getWinnerStatus(winner);
-                const badge = getStatusBadge(status);
-                const BadgeIcon = badge.icon;
-
-                return (
-                  <div
-                    key={`${winner.betId}-${index}`}
-                    className="border border-gray-200 rounded-lg p-4 hover:shadow-md transition-shadow"
-                  >
-                    <div className="flex items-center justify-between">
-                      <div className="flex-1">
-                        <div className="flex items-center space-x-3 mb-2">
-                          <h4 className="font-bold text-lg text-gray-900">
-                            {winner.customerName}
-                          </h4>
-                          <span className={`px-3 py-1 rounded-full text-xs font-semibold ${badge.bg} ${badge.text} flex items-center`}>
-                            <BadgeIcon className="w-3 h-3 mr-1" />
+            <div className="overflow-x-auto">
+              <table className="min-w-full divide-y divide-gray-200">
+                <thead className="bg-gray-50">
+                  <tr>
+                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Cliente</th>
+                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Sorteo</th>
+                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Número</th>
+                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Premio</th>
+                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Estado</th>
+                  </tr>
+                </thead>
+                <tbody className="bg-white divide-y divide-gray-200">
+                  {filteredWinners.map((winner, idx) => {
+                    const status = getWinnerStatus(winner);
+                    const badge = getStatusBadge(status);
+                    const StatusIcon = badge.icon;
+                    
+                    return (
+                      <tr key={idx} className="hover:bg-gray-50">
+                        <td className="px-6 py-4">
+                          <div className="flex items-center">
+                            <div>
+                              <div className="text-sm font-medium text-gray-900">
+                                {winner.customerName || winner.fullName}
+                              </div>
+                              {winner.isBirthday && (
+                                <div className="flex items-center text-xs text-pink-600 mt-1">
+                                  <Gift className="w-3 h-3 mr-1" />
+                                  Bonus cumpleaños
+                                </div>
+                              )}
+                            </div>
+                          </div>
+                        </td>
+                        <td className="px-6 py-4">
+                          <div className="text-sm text-gray-900">
+                            {winner.lotteryTypeName} #{winner.eventNumber}
+                          </div>
+                          <div className="text-xs text-gray-500">
+                            Ganador: {String(winner.eventWinningNumber).padStart(2, '0')}
+                          </div>
+                        </td>
+                        <td className="px-6 py-4">
+                          <span className="text-2xl font-bold text-blue-600">
+                            {String(winner.chosenNumber).padStart(2, '0')}
+                          </span>
+                        </td>
+                        <td className="px-6 py-4">
+                          <div className="text-sm font-semibold text-gray-900">
+                            Q{(winner.totalPrize || 0).toFixed(2)}
+                          </div>
+                          {winner.birthdayBonus > 0 && (
+                            <div className="text-xs text-pink-600">
+                              +Q{winner.birthdayBonus.toFixed(2)} bonus
+                            </div>
+                          )}
+                        </td>
+                        <td className="px-6 py-4">
+                          <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${badge.bg} ${badge.text}`}>
+                            <StatusIcon className="w-3 h-3 mr-1" />
                             {badge.label}
                           </span>
-                          {winner.isBirthday && (
-                            <span className="px-2 py-1 bg-yellow-100 text-yellow-800 rounded-full text-xs font-semibold">
-                              🎂 Cumpleaños
-                            </span>
-                          )}
-                        </div>
-
-                        <div className="grid grid-cols-2 md:grid-cols-4 gap-3 text-sm text-gray-600">
-                          <div>
-                            <span className="font-medium">Sorteo:</span> {winner.lotteryTypeName}
-                          </div>
-                          <div>
-                            <span className="font-medium">Evento:</span> #{winner.eventNumber}
-                          </div>
-                          <div>
-                            <span className="font-medium">Número:</span>{' '}
-                            <span className="font-bold text-green-600">
-                              {String(winner.chosenNumber).padStart(2, '0')}
-                            </span>
-                          </div>
-                          <div>
-                            <span className="font-medium">Apuesta:</span> Q{winner.betAmount.toFixed(2)}
-                          </div>
-                        </div>
-                      </div>
-
-                      <div className="text-right ml-4">
-                        <p className="text-2xl font-bold text-green-600">
-                          Q{winner.totalPrize.toFixed(2)}
-                        </p>
-                        {winner.birthdayBonus > 0 && (
-                          <p className="text-xs text-yellow-600 font-semibold">
-                            +Q{winner.birthdayBonus.toFixed(2)} bonus
-                          </p>
-                        )}
-                        <p className="text-xs text-gray-500">
-                          Base: Q{winner.basePrize.toFixed(2)}
-                        </p>
-                      </div>
-                    </div>
-                  </div>
-                );
-              })}
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
             </div>
           )}
         </div>

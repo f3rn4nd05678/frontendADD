@@ -19,7 +19,7 @@ function Layout() {
         { name: 'Reclamar Premio', to: '/claim', icon: Gift },
         { name: 'Ganadores', to: '/winners', icon: Trophy },
         { name: 'Reportes', to: '/reports', icon: BarChart3 },
-        { name: 'Configuración', to: '/settings', icon: Settings },
+
     ];
 
     return (
